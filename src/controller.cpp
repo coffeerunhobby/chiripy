@@ -25,7 +25,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs.h>
 #include <plugin-support.h>
 
+#include <chrono>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <memory>
 #include <mutex>
 
@@ -68,6 +71,26 @@ void notify()
 		listener(s, text);
 }
 
+// Seconds between YouTube's publishedAt ("2026-09-29T11:43:20.464186+00:00",
+// always UTC) and now: fanout + transport before the overlay can draw the
+// message. Garbage if the clock is off; logged as-is.
+double seconds_since_publish(const std::string &published_at)
+{
+	int Y, M, D, h, mi;
+	double sec;
+	if (sscanf(published_at.c_str(), "%4d-%2d-%2dT%2d:%2d:%lf", &Y, &M, &D, &h, &mi, &sec) != 6)
+		return -1;
+	struct tm t = {};
+	t.tm_year = Y - 1900;
+	t.tm_mon = M - 1;
+	t.tm_mday = D;
+	t.tm_hour = h;
+	t.tm_min = mi;
+	const double published = static_cast<double>(timegm(&t)) + sec;
+	const double now = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+	return now - published;
+}
+
 // Worker-thread callbacks.
 void on_message(const youtube::ChatMessage &m)
 {
@@ -77,7 +100,8 @@ void on_message(const youtube::ChatMessage &m)
 				    : m.is_moderator ? "[mod] "
 				    : m.is_member    ? "[member] "
 						     : "";
-		obs_log(LOG_INFO, "%s%s: %s", badge, m.author.c_str(), m.text.c_str());
+		obs_log(LOG_INFO, "%s%s: %s  (+%.2f s after YouTube published it)", badge, m.author.c_str(),
+			m.text.c_str(), seconds_since_publish(m.published_at));
 	} else if (m.type == "messageDeletedEvent") {
 		obs_log(LOG_INFO, "(message %s deleted)", m.deleted_message_id.c_str());
 	} else {
