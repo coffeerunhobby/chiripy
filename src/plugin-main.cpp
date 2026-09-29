@@ -18,7 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "config.hpp"
 #include "chat_source.hpp"
-#include "youtube.hpp"
+#include "controller.hpp"
+#include "dock.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -26,85 +27,30 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <curl/curl.h>
 
-#include <memory>
-
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
-
-namespace {
-
-std::unique_ptr<chiripy::youtube::ChatStream> stream;
-
-// Every chat event goes to the overlay page(s) and, for now, to the OBS log
-// as well -- the log line is the support channel until the dock exists.
-void on_message(const chiripy::youtube::ChatMessage &m)
-{
-	chiripy::chat_source::message(m);
-	if (m.type == "textMessageEvent") {
-		const char *badge = m.is_owner       ? "[owner] "
-				    : m.is_moderator ? "[mod] "
-				    : m.is_member    ? "[member] "
-						     : "";
-		obs_log(LOG_INFO, "%s%s: %s", badge, m.author.c_str(), m.text.c_str());
-	} else if (m.type == "messageDeletedEvent") {
-		obs_log(LOG_INFO, "(message %s deleted)", m.deleted_message_id.c_str());
-	} else {
-		obs_log(LOG_INFO, "%s from %s: %s", m.type.c_str(), m.author.c_str(), m.text.c_str());
-	}
-}
-
-void on_status(const std::string &s)
-{
-	obs_log(LOG_INFO, "%s", s.c_str());
-	chiripy::chat_source::status(s);
-}
-
-void start_from_config()
-{
-	stream.reset(); // joins the previous worker; it aborts within ~1 s
-	const chiripy::config::Settings s = chiripy::config::load();
-	if (s.api_key.empty() || s.video_id.empty()) {
-		obs_log(LOG_INFO, "no API key or video ID configured; idle");
-		return;
-	}
-	obs_log(LOG_INFO, "looking up live chat for video %s", s.video_id.c_str());
-	const auto lookup = chiripy::youtube::resolve_chat_id(s.api_key, s.video_id);
-	if (!lookup.error.empty()) {
-		obs_log(LOG_WARNING, "%s", lookup.error.c_str());
-		return;
-	}
-	obs_log(LOG_INFO, "connecting to live chat %s", lookup.chat_id.c_str());
-	stream = std::make_unique<chiripy::youtube::ChatStream>();
-	stream->start(s.api_key, lookup.chat_id, on_message, on_status);
-}
-
-} // namespace
 
 bool obs_module_load(void)
 {
 	// Reference-counted; OBS's own curl users make this a no-op in practice,
 	// but a plugin must not assume that.
 	curl_global_init(CURL_GLOBAL_DEFAULT);
-	chiripy::chat_source::register_source(); // "YouTube Chat (Chiripy)" in Add Source
+	chiripy::chat_source::register_source(); // "Chiripy Chat" in Add Source
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
 
-// Frontend and every other module are up here; safe to touch the network.
+// Frontend and every other module are up here; safe to touch the network
+// and to create Qt widgets.
 void obs_module_post_load(void)
 {
-	// Until the dock exists, this is how a changed config.json (new video
-	// ID) is picked up without restarting OBS -- which, with OBS-managed
-	// YouTube broadcasts, would end the very stream being connected to.
-	// Runs on the UI thread and blocks for one videos.list round trip.
-	obs_frontend_add_tools_menu_item(
-		obs_module_text("Chiripy.Tools.Reconnect"), [](void *) { start_from_config(); }, nullptr);
-	start_from_config();
+	chiripy::controller::init();
+	chiripy::register_dock();
 }
 
 void obs_module_unload(void)
 {
-	stream.reset(); // joins the worker
+	chiripy::controller::shutdown(); // joins the worker
 	chiripy::chat_source::shutdown();
 	curl_global_cleanup();
 	obs_log(LOG_INFO, "plugin unloaded");

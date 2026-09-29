@@ -126,6 +126,7 @@ std::string config_json_from(obs_data_t *settings)
 	obs_data_set_double(d, "opacity", obs_data_get_double(settings, "opacity"));
 	obs_data_set_bool(d, "background", obs_data_get_bool(settings, "background"));
 	obs_data_set_int(d, "shadowPx", obs_data_get_int(settings, "shadow_px"));
+	obs_data_set_string(d, "greeting", obs_data_get_string(settings, "greeting"));
 	obs_data_t *colors = obs_data_create();
 	for (const char *key : {"owner", "mod", "member", "user", "text"})
 		obs_data_set_string(
@@ -174,6 +175,7 @@ void get_defaults(obs_data_t *settings)
 	obs_data_set_default_double(settings, "opacity", 0.55);
 	obs_data_set_default_bool(settings, "background", true);
 	obs_data_set_default_int(settings, "shadow_px", 2);
+	obs_data_set_default_string(settings, "greeting", "Welcome to live chat!");
 	obs_data_set_default_bool(settings, "handle_resize", true);
 	// 0xAABBGGRR: pale WoW-ish palette (owner's picks, 2026-09-29), same as
 	// the CSS defaults in overlay.html
@@ -380,6 +382,7 @@ obs_properties_t *get_properties(void *data)
 	obs_properties_t *p = obs_properties_create();
 	obs_properties_add_int(p, "width", obs_module_text("Chiripy.Source.Width"), 100, 4096, 10);
 	obs_properties_add_int(p, "height", obs_module_text("Chiripy.Source.Height"), 50, 4096, 10);
+	obs_properties_add_text(p, "greeting", obs_module_text("Chiripy.Source.Greeting"), OBS_TEXT_DEFAULT);
 	obs_properties_add_int_slider(p, "rows", obs_module_text("Chiripy.Source.Rows"), 0, 40, 1);
 	obs_properties_add_int_slider(p, "font_px", obs_module_text("Chiripy.Source.FontPx"), 8, 96, 1);
 	obs_properties_add_float_slider(p, "opacity", obs_module_text("Chiripy.Source.Opacity"), 0.0, 1.0, 0.05);

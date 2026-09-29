@@ -25,7 +25,6 @@ shows demo lines so the look can be tuned without OBS.
     --c-mod: #90fcff;
     --c-member: #a0ff9a;
     --c-user: #ffc4ff;
-    --c-status: #a0a0a0;
     --c-says: #d0d0d0;
     /* Outline: the four-diagonal text-shadow hack, one shadow per corner. */
     --shadow-px: 2px;
@@ -85,17 +84,28 @@ shows demo lines so the look can be tuned without OBS.
   .role-member .name { color: var(--c-member); }
   .role-user   .name { color: var(--c-user); }
   .says { color: var(--c-says); }
-  .status { color: var(--c-status); font-style: italic; }
+  .status { color: var(--c-text); font-style: italic; }
+  /* Row 0: a pinned greeting above the scrolling lines; hidden when empty. */
+  #greeting {
+    flex: 0 0 auto;
+    color: var(--c-text);
+    font-style: italic;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-bottom: 0.15em;
+  }
+  #greeting:empty { display: none; }
   .super { color: var(--c-owner); }
 </style>
 </head>
 <body>
-<div id="panel"><div id="lines"></div></div>
+<div id="panel"><div id="greeting"></div><div id="lines"></div></div>
 <script>
 (function () {
   "use strict";
   const panel = document.getElementById("panel");
   const lines = document.getElementById("lines");
+  const greeting = document.getElementById("greeting");
   const seen = new Set();          // message ids, for snapshot/live overlap
   let rows = 8;
 
@@ -160,6 +170,7 @@ shows demo lines so the look can be tuned without OBS.
     if (typeof c.opacity === "number")
       panel.style.setProperty("--panel-alpha", Math.min(1, Math.max(0, c.opacity)));
     panel.classList.toggle("no-bg", c.background === false);
+    if (typeof c.greeting === "string") greeting.textContent = c.greeting;
     if (typeof c.shadowPx === "number" && c.shadowPx >= 0)
       panel.style.setProperty("--shadow-px", c.shadowPx + "px");
     const colours = { owner: "--c-owner", mod: "--c-mod", member: "--c-member",
@@ -213,7 +224,7 @@ shows demo lines so the look can be tuned without OBS.
       { id: "d4", role: "mod",    author: "Alistra",                  text: "Keep it civil in here, or the chat gets the ban hammer. Longer lines wrap onto the next row and count as rows, just like the game frame does." },
       { id: "d5", role: "user",   author: "CoffeeRunHobby",           text: "test 4 \u{1F600} :_vai: :face-blue-smiling: at 10:30:45" },
     ];
-    applyConfig({ rows: 8, fontPx: 20, opacity: 0.55, background: true });
+    applyConfig({ rows: 8, fontPx: 20, opacity: 0.55, background: true, greeting: "Welcome to live chat!" });
     addLine(statusLine("Chiripy overlay - demo mode (not inside OBS)"));
     demo.forEach(m => addLine(messageLine(m)));
   }

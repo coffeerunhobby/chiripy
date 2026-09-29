@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <curl/curl.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 
 namespace chiripy::youtube {
@@ -37,6 +38,10 @@ constexpr const char *kUserAgent = "chiripy/0.1 (OBS plugin)";
 // connection, not a slow one.
 constexpr long kStreamTimeoutSec = 60;
 constexpr long kLookupTimeoutSec = 15;
+// While OBS is streaming but YouTube has not marked the video live yet.
+constexpr double kLookupRetrySec = 5.0;
+
+std::atomic<long long> g_units{0};
 
 struct CurlHandle {
 	CURL *h = curl_easy_init();
@@ -195,6 +200,7 @@ ChatLookup resolve_chat_id(const std::string &api_key, const std::string &video_
 		r.error = "Could not initialise libcurl.";
 		return r;
 	}
+	g_units += 1;
 	set_common(c, api_key, kLookupTimeoutSec);
 	const std::string url = std::string(kApiBase) + "videos?part=liveStreamingDetails&id=" + escape(c.h, video_id);
 	std::string body;
@@ -205,6 +211,7 @@ ChatLookup resolve_chat_id(const std::string &api_key, const std::string &video_
 	const CURLcode rc = curl_easy_perform(c.h);
 	if (rc != CURLE_OK) {
 		r.error = std::string("Could not reach YouTube: ") + curl_easy_strerror(rc);
+		r.retryable = true;
 		return r;
 	}
 	long http = 0;
@@ -228,22 +235,85 @@ ChatLookup resolve_chat_id(const std::string &api_key, const std::string &video_
 	}
 	if (const Data details = items.item(0).obj("liveStreamingDetails"))
 		r.chat_id = details.str("activeLiveChatId");
-	if (r.chat_id.empty())
-		r.error = "That video has no active live chat. It is not a live stream, or it has already ended.";
+	if (r.chat_id.empty()) {
+		r.error = "That video has no active live chat yet. Waiting for it to go live.";
+		r.retryable = true;
+	}
 	return r;
 }
 
-void ChatStream::start(std::string api_key, std::string chat_id, MessageHandler on_message, StatusHandler on_status)
+std::string test_key(const std::string &api_key)
+{
+	CurlHandle c;
+	if (!c.h)
+		return "Could not initialise libcurl.";
+	g_units += 1;
+	set_common(c, api_key, kLookupTimeoutSec);
+	// "Me at the zoo": the first video ever uploaded, and still there.
+	const std::string url = std::string(kApiBase) + "videos?part=id&id=jNQXAC9IVRw";
+	std::string body;
+	curl_easy_setopt(c.h, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(c.h, CURLOPT_WRITEFUNCTION, write_to_string);
+	curl_easy_setopt(c.h, CURLOPT_WRITEDATA, &body);
+	const CURLcode rc = curl_easy_perform(c.h);
+	if (rc != CURLE_OK)
+		return std::string("Could not reach YouTube: ") + curl_easy_strerror(rc);
+	long http = 0;
+	curl_easy_getinfo(c.h, CURLINFO_RESPONSE_CODE, &http);
+	const Data doc = Data::from_json(body);
+	if (!doc)
+		return "YouTube returned something that is not JSON (HTTP " + std::to_string(http) + ").";
+	std::string message;
+	if (const std::string reason = error_reason(doc, &message); !reason.empty() || http != 200)
+		return explain(reason, http, message);
+	return "";
+}
+
+std::string extract_video_id(const std::string &text)
+{
+	auto trim = [](std::string t) {
+		while (!t.empty() && isspace(static_cast<unsigned char>(t.back())))
+			t.pop_back();
+		size_t i = 0;
+		while (i < t.size() && isspace(static_cast<unsigned char>(t[i])))
+			++i;
+		return t.substr(i);
+	};
+	const std::string t = trim(text);
+	auto id_after = [&](const std::string &marker) -> std::string {
+		const size_t p = t.find(marker);
+		if (p == std::string::npos)
+			return "";
+		size_t e = p + marker.size(), b = e;
+		while (e < t.size() && (isalnum(static_cast<unsigned char>(t[e])) || t[e] == '-' || t[e] == '_'))
+			++e;
+		return t.substr(b, e - b);
+	};
+	for (const char *marker : {"studio.youtube.com/video/", "watch?v=", "youtu.be/", "/live/", "v="})
+		if (const std::string id = id_after(marker); id.size() == 11)
+			return id;
+	return t; // hopefully a bare ID; the lookup will say if not
+}
+
+long long units_used()
+{
+	return g_units.load();
+}
+
+void ChatStream::start(std::string api_key, std::string video_id, MessageHandler on_message, StatusHandler on_status,
+		       StateHandler on_state)
 {
 	stop();
 	api_key_ = std::move(api_key);
-	chat_id_ = std::move(chat_id);
+	video_id_ = std::move(video_id);
+	chat_id_.clear();
 	on_message_ = std::move(on_message);
 	on_status_ = std::move(on_status);
+	on_state_ = std::move(on_state);
 	page_token_.clear();
 	backoff_ = 0;
 	stop_requested_ = false;
-	running_ = true;
+	set_state(State::Connecting);
 	worker_ = std::thread([this] { run(); });
 }
 
@@ -252,21 +322,64 @@ void ChatStream::stop()
 	stop_requested_ = true;
 	if (worker_.joinable())
 		worker_.join();
-	running_ = false;
+	if (state_ != State::Idle)
+		set_state(State::Idle);
+}
+
+void ChatStream::set_state(State s)
+{
+	state_ = s;
+	if (on_state_)
+		on_state_(s);
+}
+
+// Sleeps in small steps so stop() returns promptly. False if stopped.
+bool ChatStream::sleep_unless_stopped(double seconds)
+{
+	auto until = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+	while (std::chrono::steady_clock::now() < until) {
+		if (stop_requested_)
+			return false;
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+	return !stop_requested_;
 }
 
 void ChatStream::run()
 {
+	// Phase 1: video -> chat ID, retrying while the video is not live yet.
+	bool waiting_logged = false;
+	while (!stop_requested_) {
+		const ChatLookup lookup = resolve_chat_id(api_key_, video_id_);
+		if (lookup.error.empty()) {
+			chat_id_ = lookup.chat_id;
+			break;
+		}
+		if (!lookup.retryable) {
+			on_status_(lookup.error);
+			set_state(State::Stopped);
+			return;
+		}
+		if (!waiting_logged) {
+			on_status_(lookup.error);
+			waiting_logged = true;
+		}
+		if (!sleep_unless_stopped(kLookupRetrySec))
+			return;
+	}
+	if (stop_requested_)
+		return;
+
+	// Phase 2: the reconnect loop.
 	while (!stop_requested_) {
 		const double delay = connect_once();
 		if (delay < 0)
 			break;
-		// Sleep in small steps so stop() returns promptly.
-		auto until = std::chrono::steady_clock::now() + std::chrono::duration<double>(delay);
-		while (!stop_requested_ && std::chrono::steady_clock::now() < until)
-			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		if (!sleep_unless_stopped(delay))
+			break;
 	}
-	running_ = false;
+	if (!stop_requested_)
+		set_state(State::Stopped);
 }
 
 double ChatStream::connect_once()
@@ -295,6 +408,8 @@ double ChatStream::connect_once()
 			return;
 		}
 		got_page = true;
+		if (state_ != State::Connected)
+			set_state(State::Connected);
 		if (obj.has("nextPageToken"))
 			page_token_ = obj.str("nextPageToken");
 		const DataArray items(obs_data_get_array(obj.d, "items"));
@@ -323,6 +438,7 @@ double ChatStream::connect_once()
 			return static_cast<Ctx *>(ud)->stop->load() ? 1 : 0;
 		});
 
+	g_units += 5;
 	const CURLcode rc = curl_easy_perform(c.h);
 	if (stop_requested_)
 		return -1;
