@@ -23,6 +23,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //   crypto_test                      run the built-in vectors, exit 0 on pass
 //   crypto_test --kat KEY NONCE AAD PT   print hex(ciphertext||tag) for an
 //                                        external oracle (all args hex)
+//   crypto_test --seal < keyfile         print the sealed form of stdin
+//                                        (trailing newline stripped), for
+//                                        writing config.json by hand
 
 #include "crypto/aes_gcm.hpp"
 #include "crypto/base64.hpp"
@@ -176,6 +179,15 @@ void secret_store()
 
 int main(int argc, char **argv)
 {
+	if (argc == 2 && std::strcmp(argv[1], "--seal") == 0) {
+		std::string in;
+		for (int ch; (ch = std::getchar()) != EOF;)
+			in += static_cast<char>(ch);
+		while (!in.empty() && (in.back() == '\n' || in.back() == '\r'))
+			in.pop_back();
+		std::printf("%s\n", secret::seal(in).c_str());
+		return 0;
+	}
 	if (argc == 6 && std::strcmp(argv[1], "--kat") == 0) {
 		std::vector<uint8_t> ct;
 		const Tag128 tag = gcm_seal(arr<32>(hex(argv[2])), arr<12>(hex(argv[3])), hex(argv[4]), hex(argv[5]), ct);

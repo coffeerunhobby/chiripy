@@ -34,15 +34,22 @@ if(ENABLE_QT)
   )
 endif()
 
+# libcurl is the only library beyond libobs/Qt: the system one on macOS (what
+# OBS itself links), obs-deps on Windows. JSON goes through libobs's obs_data
+# (jansson) -- the parser OBS trusts for its own files; crypto is in-tree.
+find_package(CURL REQUIRED)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE CURL::libcurl)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)
+
 target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
     src/plugin-main.cpp
     src/config.cpp
     src/secret_store.cpp
+    src/youtube.cpp
     src/crypto/aes_gcm.cpp
     src/crypto/base64.cpp
 )
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
