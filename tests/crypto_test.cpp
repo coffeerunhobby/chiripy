@@ -91,9 +91,10 @@ void gcm_vectors()
 		 "000000000000000000000000", "", "", "", "530f8afbc74536b9a963b4f1c4cb738b"},
 		{"GCM test case 14 (one zero block)",
 		 "0000000000000000000000000000000000000000000000000000000000000000", "000000000000000000000000", "",
-		 "00000000000000000000000000000000", "cea7403d4d606b6e074ec5d3baf39d18", "d0d1c8a799996bf0265b98b5d48ab919"},
-		{"GCM test case 15 (4 blocks)",
-		 "feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308", "cafebabefacedbaddecaf888", "",
+		 "00000000000000000000000000000000", "cea7403d4d606b6e074ec5d3baf39d18",
+		 "d0d1c8a799996bf0265b98b5d48ab919"},
+		{"GCM test case 15 (4 blocks)", "feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+		 "cafebabefacedbaddecaf888", "",
 		 "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255",
 		 "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662898015ad",
 		 "b094dac5d93471bdec1a502270e3cc6c"},
@@ -142,8 +143,13 @@ void base64_vectors()
 {
 	// RFC 4648 section 10
 	const std::pair<const char *, const char *> v[] = {
-		{"", ""},           {"f", "Zg=="},         {"fo", "Zm8="},        {"foo", "Zm9v"},
-		{"foob", "Zm9vYg=="}, {"fooba", "Zm9vYmE="}, {"foobar", "Zm9vYmFy"},
+		{"", ""},
+		{"f", "Zg=="},
+		{"fo", "Zm8="},
+		{"foo", "Zm9v"},
+		{"foob", "Zm9vYg=="},
+		{"fooba", "Zm9vYmE="},
+		{"foobar", "Zm9vYmFy"},
 	};
 	for (const auto &[raw, enc] : v) {
 		const std::vector<uint8_t> bytes(raw, raw + std::strlen(raw));
@@ -190,7 +196,8 @@ int main(int argc, char **argv)
 	}
 	if (argc == 6 && std::strcmp(argv[1], "--kat") == 0) {
 		std::vector<uint8_t> ct;
-		const Tag128 tag = gcm_seal(arr<32>(hex(argv[2])), arr<12>(hex(argv[3])), hex(argv[4]), hex(argv[5]), ct);
+		const Tag128 tag =
+			gcm_seal(arr<32>(hex(argv[2])), arr<12>(hex(argv[3])), hex(argv[4]), hex(argv[5]), ct);
 		std::printf("%s%s\n", to_hex(ct.data(), ct.size()).c_str(), to_hex(tag.data(), 16).c_str());
 		return 0;
 	}

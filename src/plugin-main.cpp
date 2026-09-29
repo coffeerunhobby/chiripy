@@ -41,7 +41,10 @@ void on_message(const chiripy::youtube::ChatMessage &m)
 {
 	chiripy::chat_source::message(m);
 	if (m.type == "textMessageEvent") {
-		const char *badge = m.is_owner ? "[owner] " : m.is_moderator ? "[mod] " : m.is_member ? "[member] " : "";
+		const char *badge = m.is_owner       ? "[owner] "
+				    : m.is_moderator ? "[mod] "
+				    : m.is_member    ? "[member] "
+						     : "";
 		obs_log(LOG_INFO, "%s%s: %s", badge, m.author.c_str(), m.text.c_str());
 	} else if (m.type == "messageDeletedEvent") {
 		obs_log(LOG_INFO, "(message %s deleted)", m.deleted_message_id.c_str());
@@ -94,8 +97,8 @@ void obs_module_post_load(void)
 	// ID) is picked up without restarting OBS -- which, with OBS-managed
 	// YouTube broadcasts, would end the very stream being connected to.
 	// Runs on the UI thread and blocks for one videos.list round trip.
-	obs_frontend_add_tools_menu_item(obs_module_text("Chiripy.Tools.Reconnect"), [](void *) { start_from_config(); },
-					 nullptr);
+	obs_frontend_add_tools_menu_item(
+		obs_module_text("Chiripy.Tools.Reconnect"), [](void *) { start_from_config(); }, nullptr);
 	start_from_config();
 }
 

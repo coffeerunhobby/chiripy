@@ -222,7 +222,8 @@ ChatLookup resolve_chat_id(const std::string &api_key, const std::string &video_
 	}
 	const DataArray items(obs_data_get_array(doc.d, "items"));
 	if (items.size() == 0) {
-		r.error = "No video with that ID. Check the ID in the YouTube Studio URL (studio.youtube.com/video/<ID>/livestreaming).";
+		r.error =
+			"No video with that ID. Check the ID in the YouTube Studio URL (studio.youtube.com/video/<ID>/livestreaming).";
 		return r;
 	}
 	if (const Data details = items.item(0).obj("liveStreamingDetails"))
@@ -277,8 +278,8 @@ double ChatStream::connect_once()
 	}
 	set_common(c, api_key_, kStreamTimeoutSec);
 
-	std::string url = std::string(kApiBase) + "liveChat/messages/stream?part=id,snippet,authorDetails&liveChatId=" +
-			  escape(c.h, chat_id_);
+	std::string url = std::string(kApiBase) +
+			  "liveChat/messages/stream?part=id,snippet,authorDetails&liveChatId=" + escape(c.h, chat_id_);
 	if (!page_token_.empty())
 		url += "&pageToken=" + escape(c.h, page_token_);
 
@@ -308,18 +309,19 @@ double ChatStream::connect_once()
 
 	curl_easy_setopt(c.h, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(c.h, CURLOPT_WRITEDATA, &ctx);
-	curl_easy_setopt(c.h, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, void *ud) -> size_t {
-		static_cast<Ctx *>(ud)->splitter->feed(ptr, size * nmemb);
-		return size * nmemb;
-	});
+	curl_easy_setopt(
+		c.h, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, void *ud) -> size_t {
+			static_cast<Ctx *>(ud)->splitter->feed(ptr, size * nmemb);
+			return size * nmemb;
+		});
 	// The progress callback is how a blocking transfer learns about stop():
 	// returning non-zero aborts it within libcurl's ~1 s tick.
 	curl_easy_setopt(c.h, CURLOPT_NOPROGRESS, 0L);
 	curl_easy_setopt(c.h, CURLOPT_XFERINFODATA, &ctx);
-	curl_easy_setopt(c.h, CURLOPT_XFERINFOFUNCTION,
-			 +[](void *ud, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
-				 return static_cast<Ctx *>(ud)->stop->load() ? 1 : 0;
-			 });
+	curl_easy_setopt(
+		c.h, CURLOPT_XFERINFOFUNCTION, +[](void *ud, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+			return static_cast<Ctx *>(ud)->stop->load() ? 1 : 0;
+		});
 
 	const CURLcode rc = curl_easy_perform(c.h);
 	if (stop_requested_)

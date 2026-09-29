@@ -85,8 +85,7 @@ bool save(const Settings &s)
 	}
 
 	obs_data_t *data = obs_data_create();
-	obs_data_set_string(data, "api_key_sealed",
-			    s.api_key.empty() ? "" : chiripy::secret::seal(s.api_key).c_str());
+	obs_data_set_string(data, "api_key_sealed", s.api_key.empty() ? "" : chiripy::secret::seal(s.api_key).c_str());
 	obs_data_set_string(data, "video_id", s.video_id.c_str());
 	obs_data_set_int(data, "rows", s.rows);
 	const bool ok = obs_data_save_json_safe(data, path.c_str(), "tmp", "bak");
