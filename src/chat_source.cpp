@@ -39,10 +39,11 @@ constexpr const char *kSourceId = "chiripy_youtube_chat";
 constexpr const char *kEventName = "chiripy";
 constexpr size_t kHistory = 500; // ~100 KB; see CLAUDE.md "No memcached"
 
-// The page needs a moment to load before it can receive events. Replays are
-// idempotent (config, and messages deduped by id), so send twice to cover
-// slow and fast machines rather than guess one delay.
-constexpr float kReplayAt[] = {1.0f, 3.0f};
+// The page reads its settings from the URL fragment at load, so the only
+// thing a replay carries is recent history. One replay, once the page has
+// certainly loaded (owner's call: no repeated pushes); messages that arrive
+// earlier are dispatched live anyway, and the page dedupes by id.
+constexpr float kReplayAt[] = {10.0f};
 
 struct Instance {
 	obs_source_t *self = nullptr;
@@ -53,23 +54,64 @@ struct Instance {
 	float since_show = -1.0f; // seconds since create/show; <0 = replays done
 	int replays_sent = 0;
 
-	// Handle-drag resize: a scaled scene item is turned into a real page
-	// size once the scale has been stable for a moment (drag released).
+	// Handle-drag resize: the scene's item_transform signal arms this;
+	// once no further transform has arrived for kSettleSec (drag released)
+	// the scaled size becomes the real page size. Idle cost: one branch
+	// per frame.
 	bool handle_resize = true;
-	float resize_timer = 0.0f;
-	uint32_t pending_w = 0, pending_h = 0;
-	int pending_seen = 0;
+	bool resize_armed = false;
+	float resize_settle = 0.0f;
+	obs_sceneitem_t *resize_item = nullptr; // ref held while armed
 };
 
+constexpr float kSettleSec = 0.5f;
+
 std::mutex mtx;
-std::vector<Instance *> instances; // every live wrapper
-std::deque<std::string> history;   // JSON of recent message events
+std::vector<Instance *> instances;              // every live wrapper
+std::vector<obs_weak_source_t *> hooked_scenes; // scenes we listen to
+std::deque<std::string> history;                // JSON of recent message events
 std::string overlay_path;
 
 std::string json_of(obs_data_t *d)
 {
 	const char *s = obs_data_get_json(d);
 	return s ? s : "";
+}
+
+// RFC 3986 percent-encoding for the URL fragment.
+std::string percent_encode(const std::string &in)
+{
+	static const char *hex = "0123456789ABCDEF";
+	std::string out;
+	out.reserve(in.size() * 3);
+	for (const unsigned char c : in) {
+		if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+			out += static_cast<char>(c);
+		} else {
+			out += '%';
+			out += hex[c >> 4];
+			out += hex[c & 15];
+		}
+	}
+	return out;
+}
+
+// file:///.../overlay.html#cfg=<settings> -- the page reads its settings from
+// the fragment at load, so the first paint does not depend on an event that
+// may arrive before CEF has started (which it did, on a slow machine).
+std::string page_url(const std::string &config_json)
+{
+	return "file://" + overlay_path + "#cfg=" + percent_encode(config_json);
+}
+
+void set_child_url(Instance *inst)
+{
+	if (!inst->child)
+		return;
+	obs_data_t *cs = obs_data_create();
+	obs_data_set_string(cs, "url", page_url(inst->config_json).c_str());
+	obs_source_update(inst->child, cs);
+	obs_data_release(cs);
 }
 
 void dispatch_to(obs_source_t *child, const std::string &json)
@@ -150,6 +192,7 @@ void reload_child(Instance *inst)
 {
 	if (!inst->child)
 		return;
+	set_child_url(inst); // a fragment-only change does not reload by itself
 	// obs-browser exposes reload only as its "refreshnocache" properties
 	// button (its one proc is javascript_event), so press the button.
 	obs_properties_t *props = obs_source_properties(inst->child);
@@ -217,9 +260,10 @@ void *create(obs_data_t *settings, obs_source_t *source)
 	auto *inst = new Instance;
 	inst->self = source;
 
+	inst->config_json = config_json_from(settings);
 	obs_data_t *cs = obs_data_create();
-	obs_data_set_bool(cs, "is_local_file", true);
-	obs_data_set_string(cs, "local_file", overlay_path.c_str());
+	obs_data_set_bool(cs, "is_local_file", false);
+	obs_data_set_string(cs, "url", page_url(inst->config_json).c_str());
 	obs_data_set_int(cs, "width", obs_data_get_int(settings, "width"));
 	obs_data_set_int(cs, "height", obs_data_get_int(settings, "height"));
 	// Keep the page alive across scene switches: a reload would lose the
@@ -250,6 +294,8 @@ void destroy(void *data)
 		instances.erase(std::remove(instances.begin(), instances.end(), inst), instances.end());
 	}
 	obs_source_release(inst->child);
+	if (inst->resize_item)
+		obs_sceneitem_release(inst->resize_item);
 	delete inst;
 }
 
@@ -287,75 +333,68 @@ void show(void *data)
 	inst->replays_sent = 0;
 }
 
-// Looks for a scene item of this source in the current scene whose scale is
-// not 1:1 -- i.e. the user dragged a handle. OBS handles only scale the
-// picture; a browser page stretched that way goes soft and does not re-wrap.
-// After the scale has held still for two checks (drag released), the scaled
+// OBS handles only scale the picture; a browser page stretched that way
+// goes soft and does not re-wrap. When the drag has settled, the scaled
 // size becomes the real page size and the item goes back to 1:1.
-void check_handle_resize(Instance *inst)
+void apply_handle_resize(Instance *inst)
 {
-	obs_source_t *scene_src = obs_frontend_get_current_scene();
-	obs_scene_t *scene = obs_scene_from_source(scene_src);
-	if (!scene) {
-		obs_source_release(scene_src);
+	obs_sceneitem_t *item = inst->resize_item;
+	inst->resize_item = nullptr;
+	if (!item)
 		return;
-	}
-	struct Found {
-		Instance *inst;
-		obs_sceneitem_t *item = nullptr;
-		vec2 scale{};
-	} found{inst};
-	obs_scene_enum_items(
-		scene,
-		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
-			auto *f = static_cast<Found *>(param);
-			if (obs_sceneitem_get_source(item) != f->inst->self ||
-			    obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE)
-				return true;
-			obs_sceneitem_get_scale(item, &f->scale);
-			if (std::fabs(f->scale.x - 1.0f) > 0.005f || std::fabs(f->scale.y - 1.0f) > 0.005f) {
-				f->item = item;
-				return false; // first scaled item wins
-			}
-			return true;
-		},
-		&found);
-
-	if (!found.item) {
-		inst->pending_seen = 0;
-	} else {
-		const auto w = static_cast<uint32_t>(std::lround(inst->width * found.scale.x));
-		const auto h = static_cast<uint32_t>(std::lround(inst->height * found.scale.y));
-		if (w == inst->pending_w && h == inst->pending_h)
-			++inst->pending_seen;
-		else
-			inst->pending_seen = 1;
-		inst->pending_w = w;
-		inst->pending_h = h;
-		if (inst->pending_seen >= 2 && w >= 100 && h >= 50) {
+	vec2 scale;
+	obs_sceneitem_get_scale(item, &scale);
+	const bool scaled = std::fabs(scale.x - 1.0f) > 0.005f || std::fabs(scale.y - 1.0f) > 0.005f;
+	if (scaled && obs_sceneitem_get_bounds_type(item) == OBS_BOUNDS_NONE) {
+		const auto w = static_cast<uint32_t>(std::lround(inst->width * scale.x));
+		const auto h = static_cast<uint32_t>(std::lround(inst->height * scale.y));
+		if (w >= 100 && h >= 50) {
 			vec2 one = {1.0f, 1.0f};
-			obs_sceneitem_set_scale(found.item, &one);
+			obs_sceneitem_set_scale(item, &one);
 			obs_data_t *settings = obs_source_get_settings(inst->self);
 			obs_data_set_int(settings, "width", w);
 			obs_data_set_int(settings, "height", h);
 			obs_source_update(inst->self, settings); // -> update(): child resize + reload
 			obs_data_release(settings);
-			inst->pending_seen = 0;
 		}
 	}
-	obs_source_release(scene_src);
+	obs_sceneitem_release(item);
 }
 
-// Graphics thread, once per frame: drives the delayed replays and the
-// handle-resize check.
+// Scene signal "item_transform": fires for every transform change, i.e.
+// continuously during a handle drag. Arm (or re-arm) the settle timer.
+void on_item_transform(void *, calldata_t *cd)
+{
+	auto *item = static_cast<obs_sceneitem_t *>(calldata_ptr(cd, "item"));
+	if (!item)
+		return;
+	obs_source_t *src = obs_sceneitem_get_source(item);
+	std::lock_guard<std::mutex> lock(mtx);
+	for (Instance *inst : instances) {
+		if (inst->self != src || !inst->handle_resize)
+			continue;
+		if (inst->resize_item != item) {
+			if (inst->resize_item)
+				obs_sceneitem_release(inst->resize_item);
+			obs_sceneitem_addref(item);
+			inst->resize_item = item;
+		}
+		inst->resize_armed = true;
+		inst->resize_settle = 0.0f;
+	}
+}
+
+// Graphics thread, once per frame. Idle cost is two branches: the replay
+// countdown until the single replay has gone out, and the resize settle
+// timer while a drag is in progress.
 void video_tick(void *data, float seconds)
 {
 	auto *inst = static_cast<Instance *>(data);
-	if (inst->handle_resize) {
-		inst->resize_timer += seconds;
-		if (inst->resize_timer >= 0.25f) {
-			inst->resize_timer = 0.0f;
-			check_handle_resize(inst);
+	if (inst->resize_armed) {
+		inst->resize_settle += seconds;
+		if (inst->resize_settle >= kSettleSec) {
+			inst->resize_armed = false;
+			apply_handle_resize(inst);
 		}
 	}
 	if (inst->since_show < 0.0f)
@@ -429,8 +468,40 @@ void register_source()
 	obs_register_source(&info);
 }
 
+void rehook_scenes()
+{
+	for (obs_weak_source_t *weak : hooked_scenes) {
+		if (obs_source_t *scene = obs_weak_source_get_source(weak)) {
+			signal_handler_disconnect(obs_source_get_signal_handler(scene), "item_transform",
+						  on_item_transform, nullptr);
+			obs_source_release(scene);
+		}
+		obs_weak_source_release(weak);
+	}
+	hooked_scenes.clear();
+
+	obs_frontend_source_list scenes = {};
+	obs_frontend_get_scenes(&scenes);
+	for (size_t i = 0; i < scenes.sources.num; ++i) {
+		obs_source_t *scene = scenes.sources.array[i];
+		signal_handler_connect(obs_source_get_signal_handler(scene), "item_transform", on_item_transform,
+				       nullptr);
+		hooked_scenes.push_back(obs_source_get_weak_source(scene));
+	}
+	obs_frontend_source_list_free(&scenes);
+}
+
 void shutdown()
 {
+	for (obs_weak_source_t *weak : hooked_scenes) {
+		if (obs_source_t *scene = obs_weak_source_get_source(weak)) {
+			signal_handler_disconnect(obs_source_get_signal_handler(scene), "item_transform",
+						  on_item_transform, nullptr);
+			obs_source_release(scene);
+		}
+		obs_weak_source_release(weak);
+	}
+	hooked_scenes.clear();
 	std::lock_guard<std::mutex> lock(mtx);
 	history.clear();
 }

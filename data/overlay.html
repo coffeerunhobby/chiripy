@@ -208,12 +208,22 @@ shows demo lines so the look can be tuned without OBS.
         applyConfig(d);
         break;
       case "status":
-        addLine(statusLine(d.text || ""));
+        // At most one status line, always the newest; empty text clears it.
+        for (const el of lines.querySelectorAll(".line.status")) el.remove();
+        if (d.text) addLine(statusLine(d.text));
         break;
     }
   }
 
   window.addEventListener("chiripy", handle);
+
+  // The plugin puts the source's settings in the URL fragment so the very
+  // first paint is right, however long CEF takes to start; events only
+  // carry changes made afterwards.
+  try {
+    const m = /[#&]cfg=([^&]*)/.exec(location.hash);
+    if (m) applyConfig(JSON.parse(decodeURIComponent(m[1])));
+  } catch (e) { /* malformed fragment: keep CSS defaults */ }
 
   // Outside OBS (no window.obsstudio): demo content for tuning the look.
   if (!window.obsstudio) {

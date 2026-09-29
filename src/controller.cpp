@@ -97,6 +97,8 @@ void on_status(const std::string &text)
 
 void on_state(youtube::State s)
 {
+	if (s == youtube::State::Connected)
+		chat_source::status(""); // clears the panel's status line
 	{
 		std::lock_guard<std::mutex> lock(mtx);
 		state_now = s;
@@ -137,6 +139,11 @@ void on_frontend_event(enum obs_frontend_event event, void *)
 		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
 		disconnect();
+		break;
+	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
+	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
+		chat_source::rehook_scenes();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
 	case OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN:

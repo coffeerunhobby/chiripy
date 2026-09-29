@@ -129,7 +129,7 @@ Dock::Dock(QWidget *parent) : QWidget(parent)
 
 	auto *quota_timer = new QTimer(this);
 	connect(quota_timer, &QTimer::timeout, this, &Dock::refresh_quota);
-	quota_timer->start(10000);
+	quota_timer->start(30000);
 	refresh_quota();
 }
 
@@ -206,6 +206,8 @@ void Dock::show_state(youtube::State state, const std::string &status)
 
 void Dock::refresh_quota()
 {
+	if (!isVisible())
+		return;
 	const long long used = youtube::units_used();
 	const double left_hours = (kDailyUnits - static_cast<double>(used)) / kUnitsPerHour;
 	quota_->setText(QString(T("Chiripy.Dock.Quota")).arg(used).arg(left_hours < 0 ? 0.0 : left_hours, 0, 'f', 1));

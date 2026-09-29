@@ -41,6 +41,11 @@ namespace chiripy::chat_source {
 void register_source(); // call from obs_module_load
 void shutdown();        // call from obs_module_unload
 
+// Connects to every scene's item_transform signal so a handle drag on one of
+// our sources is noticed without polling. Call when the scene list changes
+// (frontend FINISHED_LOADING, SCENE_LIST_CHANGED, SCENE_COLLECTION_CHANGED).
+void rehook_scenes();
+
 void message(const youtube::ChatMessage &m);
 void status(const std::string &text);
 void clear();

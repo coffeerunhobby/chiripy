@@ -19,7 +19,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -106,6 +108,8 @@ private:
 	StateHandler on_state_;
 	std::thread worker_;
 	std::atomic<bool> stop_requested_{false};
+	std::mutex stop_mtx_;
+	std::condition_variable stop_cv_; // wakes a sleeping worker on stop()
 	std::atomic<State> state_{State::Idle};
 	int backoff_ = 0; // consecutive failures, drives exponential backoff
 };

@@ -319,7 +319,11 @@ void ChatStream::start(std::string api_key, std::string video_id, MessageHandler
 
 void ChatStream::stop()
 {
-	stop_requested_ = true;
+	{
+		std::lock_guard<std::mutex> lock(stop_mtx_);
+		stop_requested_ = true;
+	}
+	stop_cv_.notify_all();
 	if (worker_.joinable())
 		worker_.join();
 	if (state_ != State::Idle)
@@ -333,15 +337,12 @@ void ChatStream::set_state(State s)
 		on_state_(s);
 }
 
-// Sleeps in small steps so stop() returns promptly. False if stopped.
+// Sleeps the full duration with no periodic wakeups; stop() interrupts it.
+// False if stopped.
 bool ChatStream::sleep_unless_stopped(double seconds)
 {
-	auto until = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
-	while (std::chrono::steady_clock::now() < until) {
-		if (stop_requested_)
-			return false;
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-	}
+	std::unique_lock<std::mutex> lock(stop_mtx_);
+	stop_cv_.wait_for(lock, std::chrono::duration<double>(seconds), [this] { return stop_requested_.load(); });
 	return !stop_requested_;
 }
 
