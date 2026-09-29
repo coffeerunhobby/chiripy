@@ -2,9 +2,9 @@
 
 Low-latency YouTube live chat overlay for OBS Studio.
 
-Chiripy is an OBS plugin that shows your YouTube live chat on the canvas the
-way the old World of Warcraft chat frame did: a fixed number of text rows on
-a translucent panel, `Name: message`, names coloured by role. Messages are
+Chiripy is an OBS plugin that shows your YouTube live chat on the canvas in the
+style of the chat window from classic online games: a fixed number of text
+rows on a translucent panel, `Name: message`, names coloured by role. Messages are
 **pushed** from YouTube's streaming API the moment they exist -- there is no
 polling and nothing to host. It uses your own YouTube API key, so it costs
 nothing, needs no sign-in, and never talks to anyone but Google.
@@ -13,6 +13,23 @@ nothing, needs no sign-in, and never talks to anyone but Google.
 - Adds a source, **Chiripy Chat**, and a dock, **Chiripy**.
 - No cloud service, no account, no telemetry. No support either: this README
   and the plugin's own messages are the documentation.
+
+## Install
+
+Download the file for your system from the
+[latest release](https://github.com/coffeerunhobby/chiripy/releases), close
+OBS, install, start OBS again.
+
+- **macOS**: open `chiripy-<version>-macos-universal.pkg`. While the package
+  is not yet signed, macOS refuses it the first time: open System Settings ->
+  Privacy & Security, scroll down and press **Open Anyway**, then run it
+  again. It installs into `~/Library/Application Support/obs-studio/plugins/`.
+- **Windows**: extract `chiripy-<version>-windows-x64.zip` into
+  `C:\ProgramData\obs-studio\plugins\`, so that you end up with
+  `C:\ProgramData\obs-studio\plugins\chiripy\bin\64bit\chiripy.dll`.
+- **Linux (Ubuntu 24.04)**: `sudo apt install ./chiripy-<version>-x86_64-linux-gnu.deb`.
+
+Then **Docks -> Chiripy** should be in the OBS menu.
 
 ## Setup (once, about five minutes)
 

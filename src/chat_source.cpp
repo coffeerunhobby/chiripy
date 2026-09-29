@@ -220,7 +220,7 @@ void get_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, "shadow_px", 2);
 	obs_data_set_default_string(settings, "greeting", "Welcome to live chat!");
 	obs_data_set_default_bool(settings, "handle_resize", true);
-	// 0xAABBGGRR: pale WoW-ish palette (owner's picks, 2026-09-29), same as
+	// 0xAABBGGRR: pale classic-game palette (owner's picks, 2026-09-29), same as
 	// the CSS defaults in overlay.html
 	obs_data_set_default_int(settings, "color_owner", 0xff80e6ff);  // #ffe680
 	obs_data_set_default_int(settings, "color_mod", 0xfffffc90);    // #90fcff
