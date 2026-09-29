@@ -86,7 +86,11 @@ double seconds_since_publish(const std::string &published_at)
 	t.tm_mday = D;
 	t.tm_hour = h;
 	t.tm_min = mi;
+#ifdef _WIN32
+	const double published = static_cast<double>(_mkgmtime(&t)) + sec;
+#else
 	const double published = static_cast<double>(timegm(&t)) + sec;
+#endif
 	const double now = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
 	return now - published;
 }

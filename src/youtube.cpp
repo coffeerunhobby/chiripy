@@ -449,7 +449,7 @@ double ChatStream::connect_once()
 
 	if (rc != CURLE_OK && rc != CURLE_ABORTED_BY_CALLBACK) {
 		++backoff_;
-		const double delay = std::min(60.0, 2.0 * (1 << std::min(backoff_, 5)));
+		const double delay = (std::min)(60.0, 2.0 * (1 << (std::min)(backoff_, 5)));
 		on_status_(std::string("Connection to YouTube failed: ") + curl_easy_strerror(rc) + ". Retrying in " +
 			   std::to_string(static_cast<int>(delay)) + " s.");
 		return delay;
@@ -470,7 +470,7 @@ double ChatStream::connect_once()
 			return 1;
 		}
 		++backoff_;
-		const double delay = std::min(60.0, 2.0 * (1 << std::min(backoff_, 5)));
+		const double delay = (std::min)(60.0, 2.0 * (1 << (std::min)(backoff_, 5)));
 		on_status_(what + " Retrying in " + std::to_string(static_cast<int>(delay)) + " s.");
 		return delay;
 	}
