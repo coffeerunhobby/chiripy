@@ -1,0 +1,39 @@
+name: Bug report
+description: Something went wrong with Chiripy
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! If you opened this from the **Report a problem** button in the Chiripy dock, *Environment* and *Recent Chiripy messages* are already filled in — look them over before submitting. They contain Chiripy's own status and error lines only: never your API key, never chat messages.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+  - type: input
+    id: log_url
+    attributes:
+      label: OBS log link
+      description: "In OBS: Help → Log Files → Upload Current Log File, then paste the link here. If OBS crashed and its Help menu offers Crash Reports → Upload Last Crash Report, paste that link too."
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Chiripy, OBS, Qt and OS versions.
+      render: text
+  - type: textarea
+    id: errors
+    attributes:
+      label: Recent Chiripy messages
+      description: The last status and error lines from the Chiripy dock.
+      render: text

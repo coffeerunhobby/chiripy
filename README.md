@@ -31,6 +31,21 @@ OBS, install, start OBS again.
 
 Then **Docks -> Chiripy** should be in the OBS menu.
 
+## Uninstall
+
+Close OBS first.
+
+- **Windows**: Settings -> Apps -> Installed apps -> **Chiripy Chat (OBS Studio
+  plugin)** -> Uninstall (or delete
+  `C:\ProgramData\obs-studio\plugins\chiripy` if you installed from the zip).
+- **macOS**: delete
+  `~/Library/Application Support/obs-studio/plugins/chiripy.plugin`.
+- **Linux**: `sudo apt remove chiripy`.
+
+Your settings and the stored API key are kept in OBS's plugin configuration
+folder (see [Where is my key stored?](#faq)); delete
+`plugin_config/chiripy` there as well to remove every trace.
+
 ## Setup (once, about five minutes)
 
 You need a YouTube Data API key from your own Google Cloud project. This is
@@ -110,6 +125,15 @@ in *Ultra low*). Chiripy receives a message at the same moment OBS's YouTube
 chat dock does; the overlay is part of the video, so viewers get both
 together.
 
+**How do I report a problem?** Press **Report a problem** at the bottom of
+the Chiripy dock. It opens a GitHub issue in your browser with Chiripy's
+version, OBS and OS versions, and the last Chiripy status and error lines
+already filled in; add what happened, and in OBS use Help -> Log Files ->
+Upload Current Log File and paste the link. Nothing is sent until you press
+Submit on GitHub, and the pre-filled text never contains your API key or chat
+messages. You can also open an issue directly at
+<https://github.com/coffeerunhobby/chiripy/issues>.
+
 **Where are the logs?** In OBS's normal log (Help -> Log Files), prefixed
 `[chiripy]`. Each received message is logged with its delay after YouTube
 published it.
@@ -136,8 +160,12 @@ Chiripy spends nothing while you are not streaming.
 
 ## Privacy
 
-Chiripy sends your API key and the stream's video ID to
-`youtube.googleapis.com` and receives chat messages. Nothing is sent
+This program will not transfer any information to other networked systems
+unless specifically requested by the user or the person installing or
+operating it. When you connect it, Chiripy sends your API key and the stream's video ID to
+`youtube.googleapis.com` and receives chat messages. The **Report a problem** button
+only opens a pre-filled GitHub page in your browser; nothing leaves your
+machine unless you submit it yourself. Nothing is sent
 anywhere else, nothing is stored except your settings, and no data leaves
 your machine other than to Google. Use of the YouTube API is subject to
 YouTube's Terms of Service (<https://www.youtube.com/t/terms>) and Google's
@@ -162,6 +190,23 @@ without OBS:
 ```bash
 clang++ -std=c++17 -I src tests/crypto_test.cpp src/crypto/*.cpp src/secret_store.cpp -o crypto_test && ./crypto_test
 ```
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/),
+certificate by [SignPath Foundation](https://signpath.org/).
+
+Windows binaries (`chiripy.dll` and the installer) are built by this
+repository's GitHub Actions workflow from the tagged source, and signed only
+for releases published here.
+
+Team roles:
+
+- Committers and reviewers: [coffeerunhobby](https://github.com/coffeerunhobby)
+- Approvers: [coffeerunhobby](https://github.com/coffeerunhobby)
+
+Privacy: see [Privacy](#privacy) -- Chiripy transfers nothing except what you
+ask it to send to YouTube's API.
 
 ## License
 

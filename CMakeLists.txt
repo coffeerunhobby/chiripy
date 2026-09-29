@@ -51,6 +51,7 @@ target_sources(
     src/chat_source.cpp
     src/controller.cpp
     src/dock.cpp
+    src/diagnostics.cpp
     src/crypto/aes_gcm.cpp
     src/crypto/base64.cpp
 )

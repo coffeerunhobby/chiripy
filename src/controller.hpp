@@ -43,6 +43,8 @@ std::string last_status();
 
 // From the dock. An empty api_key keeps the stored one.
 void save_and_connect(const std::string &api_key, const std::string &video_id);
+// Stores a new API key without connecting (the dock's key arrow).
+void save_key(const std::string &api_key);
 void disconnect();
 
 } // namespace chiripy::controller

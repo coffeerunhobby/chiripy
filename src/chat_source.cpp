@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "chat_source.hpp"
 
+#include "diagnostics.hpp"
+
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -363,7 +365,7 @@ void apply_handle_resize(Instance *inst)
 
 // Scene signal "item_transform": fires for every transform change, i.e.
 // continuously during a handle drag. Arm (or re-arm) the settle timer.
-void on_item_transform(void *, calldata_t *cd)
+void on_item_transform_impl(calldata_t *cd)
 {
 	auto *item = static_cast<obs_sceneitem_t *>(calldata_ptr(cd, "item"));
 	if (!item)
@@ -382,6 +384,11 @@ void on_item_transform(void *, calldata_t *cd)
 		inst->resize_armed = true;
 		inst->resize_settle = 0.0f;
 	}
+}
+
+void on_item_transform(void *, calldata_t *cd)
+{
+	diag::guard("scene item transform", [cd] { on_item_transform_impl(cd); });
 }
 
 // Graphics thread, once per frame. Idle cost is two branches: the replay
@@ -412,7 +419,7 @@ void video_tick(void *data, float seconds)
 
 bool refresh_clicked(obs_properties_t *, obs_property_t *, void *data)
 {
-	reload_child(static_cast<Instance *>(data));
+	diag::guard("reload button", [data] { reload_child(static_cast<Instance *>(data)); });
 	return false;
 }
 
@@ -447,23 +454,43 @@ void register_source()
 	if (overlay_path.empty())
 		obs_log(LOG_ERROR, "overlay.html is missing from the plugin bundle");
 
+	// OBS calls these from C: every callback with non-trivial code runs
+	// behind an exception barrier (see diagnostics.hpp).
 	static obs_source_info info = {};
 	info.id = kSourceId;
 	info.type = OBS_SOURCE_TYPE_INPUT;
 	info.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW | OBS_SOURCE_DO_NOT_DUPLICATE;
 	info.get_name = get_name;
-	info.create = create;
-	info.destroy = destroy;
-	info.update = update;
-	info.get_defaults = get_defaults;
-	info.get_properties = get_properties;
+	info.create = [](obs_data_t *s, obs_source_t *src) -> void * {
+		void *r = nullptr;
+		diag::guard("source create", [&] { r = create(s, src); });
+		return r;
+	};
+	info.destroy = [](void *d) {
+		diag::guard("source destroy", [d] { destroy(d); });
+	};
+	info.update = [](void *d, obs_data_t *s) {
+		diag::guard("source update", [d, s] { update(d, s); });
+	};
+	info.get_defaults = [](obs_data_t *s) {
+		diag::guard("source defaults", [s] { get_defaults(s); });
+	};
+	info.get_properties = [](void *d) -> obs_properties_t * {
+		obs_properties_t *p = nullptr;
+		diag::guard("source properties", [&] { p = get_properties(d); });
+		return p;
+	};
 	info.get_width = get_width;
 	info.get_height = get_height;
 	info.video_render = video_render;
-	info.video_tick = video_tick;
+	info.video_tick = [](void *d, float t) {
+		diag::guard("source tick", [d, t] { video_tick(d, t); });
+	};
 	info.enum_active_sources = enum_sources;
 	info.enum_all_sources = enum_sources;
-	info.show = show;
+	info.show = [](void *d) {
+		diag::guard("source show", [d] { show(d); });
+	};
 	info.icon_type = OBS_ICON_TYPE_BROWSER;
 	obs_register_source(&info);
 }

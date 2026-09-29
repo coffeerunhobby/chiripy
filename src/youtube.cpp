@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "youtube.hpp"
 
+#include "diagnostics.hpp"
 #include "json_splitter.hpp"
 
 #include <obs-data.h>
@@ -314,7 +315,16 @@ void ChatStream::start(std::string api_key, std::string video_id, MessageHandler
 	backoff_ = 0;
 	stop_requested_ = false;
 	set_state(State::Connecting);
-	worker_ = std::thread([this] { run(); });
+	// An exception escaping a std::thread calls std::terminate and takes OBS
+	// down; stop the stream with a sentence instead.
+	worker_ = std::thread([this] {
+		if (!diag::guard("chat stream worker", [this] { run(); })) {
+			on_status_(
+				"Chiripy stopped after an internal error. Use \"Report a problem\" in the Chiripy dock "
+				"to send us the details.");
+			set_state(State::Stopped);
+		}
+	});
 }
 
 void ChatStream::stop()
@@ -401,21 +411,23 @@ double ChatStream::connect_once()
 	std::string error_reason_seen, error_message_seen;
 	bool got_page = false;
 	JsonArraySplitter splitter([&](const std::string &text) {
-		const Data obj = Data::from_json(text);
-		if (!obj)
-			return;
-		if (const std::string reason = error_reason(obj, &error_message_seen); !reason.empty()) {
-			error_reason_seen = reason;
-			return;
-		}
-		got_page = true;
-		if (state_ != State::Connected)
-			set_state(State::Connected);
-		if (obj.has("nextPageToken"))
-			page_token_ = obj.str("nextPageToken");
-		const DataArray items(obs_data_get_array(obj.d, "items"));
-		for (size_t i = 0; i < items.size(); ++i)
-			on_message_(parse_message(items.item(i)));
+		diag::guard("chat message", [&] {
+			const Data obj = Data::from_json(text);
+			if (!obj)
+				return;
+			if (const std::string reason = error_reason(obj, &error_message_seen); !reason.empty()) {
+				error_reason_seen = reason;
+				return;
+			}
+			got_page = true;
+			if (state_ != State::Connected)
+				set_state(State::Connected);
+			if (obj.has("nextPageToken"))
+				page_token_ = obj.str("nextPageToken");
+			const DataArray items(obs_data_get_array(obj.d, "items"));
+			for (size_t i = 0; i < items.size(); ++i)
+				on_message_(parse_message(items.item(i)));
+		});
 	});
 
 	struct Ctx {
@@ -427,8 +439,11 @@ double ChatStream::connect_once()
 	curl_easy_setopt(c.h, CURLOPT_WRITEDATA, &ctx);
 	curl_easy_setopt(
 		c.h, CURLOPT_WRITEFUNCTION, +[](char *ptr, size_t size, size_t nmemb, void *ud) -> size_t {
-			static_cast<Ctx *>(ud)->splitter->feed(ptr, size * nmemb);
-			return size * nmemb;
+			// Returning 0 makes libcurl abort this connection; the loop
+			// then reconnects with backoff instead of crashing OBS.
+			const size_t n = size * nmemb;
+			return diag::guard("stream data", [&] { static_cast<Ctx *>(ud)->splitter->feed(ptr, n); }) ? n
+														   : 0;
 		});
 	// The progress callback is how a blocking transfer learns about stop():
 	// returning non-zero aborts it within libcurl's ~1 s tick.

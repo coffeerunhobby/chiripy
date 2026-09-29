@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "controller.hpp"
 
 #include "chat_source.hpp"
+#include "diagnostics.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -52,7 +53,7 @@ void on_ui(std::function<void()> fn)
 		OBS_TASK_UI,
 		[](void *p) {
 			auto *f = static_cast<std::function<void()> *>(p);
-			(*f)();
+			diag::guard("UI task", [f] { (*f)(); });
 			delete f;
 		},
 		boxed, false);
@@ -115,6 +116,7 @@ void on_message(const youtube::ChatMessage &m)
 
 void on_status(const std::string &text)
 {
+	diag::note(text);
 	obs_log(LOG_INFO, "%s", text.c_str());
 	chat_source::status(text);
 	{
@@ -188,7 +190,7 @@ void connect_now(bool from_obs)
 	stream->start(current.api_key, current.video_id, on_message, on_status, on_state);
 }
 
-void on_frontend_event(enum obs_frontend_event event, void *)
+void on_frontend_event_impl(enum obs_frontend_event event)
 {
 	switch (event) {
 	case OBS_FRONTEND_EVENT_STREAMING_STARTED:
@@ -214,6 +216,11 @@ void on_frontend_event(enum obs_frontend_event event, void *)
 	default:
 		break;
 	}
+}
+
+void on_frontend_event(enum obs_frontend_event event, void *)
+{
+	diag::guard("frontend event", [event] { on_frontend_event_impl(event); });
 }
 
 } // namespace
@@ -276,6 +283,13 @@ void save_and_connect(const std::string &api_key, const std::string &video_id)
 	if (!config::save(current))
 		obs_log(LOG_WARNING, "settings could not be saved; using them for this session only");
 	connect_now(false);
+}
+
+void save_key(const std::string &api_key)
+{
+	current.api_key = api_key;
+	if (!config::save(current))
+		obs_log(LOG_WARNING, "settings could not be saved; using them for this session only");
 }
 
 void disconnect()
