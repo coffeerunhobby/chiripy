@@ -25,9 +25,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs.h>
 #include <plugin-support.h>
 
+#include <QDesktopServices>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <functional>
@@ -73,7 +75,15 @@ Dock::Dock(QWidget *parent) : QWidget(parent)
 
 	video_id_ = new QLineEdit(this);
 	video_id_->setPlaceholderText(T("Chiripy.Dock.VideoIdHint"));
-	form->addRow(T("Chiripy.Dock.VideoId"), video_id_);
+	open_ = new QToolButton(this);
+	open_->setText(QString::fromUtf8("\u2197")); // north-east arrow
+	open_->setToolTip(T("Chiripy.Dock.OpenStream"));
+	open_->setAutoRaise(true);
+	auto *id_row = new QHBoxLayout();
+	id_row->setContentsMargins(0, 0, 0, 0);
+	id_row->addWidget(video_id_, 1);
+	id_row->addWidget(open_);
+	form->addRow(T("Chiripy.Dock.VideoId"), id_row);
 	root->addLayout(form);
 
 	auto *buttons = new QHBoxLayout();
@@ -117,6 +127,9 @@ Dock::Dock(QWidget *parent) : QWidget(parent)
 	connect(disconnect_, &QPushButton::clicked, this, &Dock::on_disconnect);
 	connect(test_, &QPushButton::clicked, this, &Dock::on_test_key);
 	connect(video_id_, &QLineEdit::returnPressed, this, &Dock::on_save_connect);
+	connect(open_, &QToolButton::clicked, this, &Dock::on_open_stream);
+	connect(video_id_, &QLineEdit::textChanged, this,
+		[this](const QString &t) { open_->setEnabled(!youtube::extract_video_id(t.toStdString()).empty()); });
 
 	// Saved values: the key never comes back into the field, only a hint
 	// that one is stored; leaving the field empty keeps it.
@@ -124,6 +137,7 @@ Dock::Dock(QWidget *parent) : QWidget(parent)
 	has_saved_key_ = !s.api_key.empty();
 	api_key_->setPlaceholderText(T(has_saved_key_ ? "Chiripy.Dock.ApiKeySaved" : "Chiripy.Dock.ApiKeyHint"));
 	video_id_->setText(QString::fromStdString(s.video_id));
+	open_->setEnabled(!s.video_id.empty());
 
 	controller::set_listener([this](youtube::State st, const std::string &text) { show_state(st, text); });
 
@@ -152,6 +166,14 @@ void Dock::on_save_connect()
 		api_key_->setPlaceholderText(T("Chiripy.Dock.ApiKeySaved"));
 	}
 	video_id_->setText(QString::fromStdString(controller::settings().video_id));
+}
+
+void Dock::on_open_stream()
+{
+	const std::string id = youtube::extract_video_id(video_id_->text().toStdString());
+	if (!id.empty())
+		QDesktopServices::openUrl(
+			QUrl(QString("https://www.youtube.com/watch?v=") + QString::fromStdString(id)));
 }
 
 void Dock::on_disconnect()
@@ -199,6 +221,9 @@ void Dock::show_state(youtube::State state, const std::string &status)
 	}
 	state_->setText(T(label));
 	status_->setText(QString::fromStdString(status));
+	const QString id = QString::fromStdString(controller::settings().video_id);
+	if (video_id_->text() != id && !video_id_->hasFocus())
+		video_id_->setText(id);
 	const bool busy = state == youtube::State::Connecting || state == youtube::State::Connected;
 	disconnect_->setEnabled(busy);
 	refresh_quota();

@@ -60,7 +60,8 @@ Settings load()
 			// garbage to YouTube. The dock will ask for the key again.
 			obs_log(LOG_WARNING, "stored API key failed to unseal; ignoring it");
 	}
-	s.video_id = obs_data_get_string(data, "video_id");
+	// video_id is deliberately not loaded: a live video ID belongs to one
+	// stream, so a saved one is stale by the next OBS launch.
 	obs_data_set_default_int(data, "rows", s.rows);
 	s.rows = static_cast<int>(obs_data_get_int(data, "rows"));
 
@@ -86,7 +87,6 @@ bool save(const Settings &s)
 
 	obs_data_t *data = obs_data_create();
 	obs_data_set_string(data, "api_key_sealed", s.api_key.empty() ? "" : chiripy::secret::seal(s.api_key).c_str());
-	obs_data_set_string(data, "video_id", s.video_id.c_str());
 	obs_data_set_int(data, "rows", s.rows);
 	const bool ok = obs_data_save_json_safe(data, path.c_str(), "tmp", "bak");
 	obs_data_release(data);

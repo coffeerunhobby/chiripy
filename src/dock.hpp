@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QToolButton>
 #include <QWidget>
 
 #include <string>
@@ -43,6 +44,7 @@ private slots:
 	void on_save_connect();
 	void on_disconnect();
 	void on_test_key();
+	void on_open_stream();
 
 private:
 	void show_state(youtube::State state, const std::string &status);
@@ -51,6 +53,7 @@ private:
 
 	QLineEdit *api_key_ = nullptr;
 	QLineEdit *video_id_ = nullptr;
+	QToolButton *open_ = nullptr; // opens the watch page of the video ID
 	QPushButton *connect_ = nullptr;
 	QPushButton *disconnect_ = nullptr;
 	QPushButton *test_ = nullptr;

@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs.h>
 #include <plugin-support.h>
 
+#include <cstring>
 #include <memory>
 #include <mutex>
 
@@ -112,8 +113,39 @@ void on_state(youtube::State s)
 	on_ui(notify);
 }
 
-void connect_now()
+// When the streamer is signed in to YouTube inside OBS and used Manage
+// Broadcast, OBS writes the broadcast (= video) ID into the streaming
+// service settings before it starts streaming (OBSBasic_YouTube.cpp,
+// "broadcast_id"). Zero quota, exact, no paste needed. With a plain stream
+// key the field is empty and the dock's video ID is used instead.
+std::string broadcast_id_from_obs()
 {
+	obs_service_t *service = obs_frontend_get_streaming_service();
+	if (!service)
+		return "";
+	obs_data_t *settings = obs_service_get_settings(service);
+	const char *name = obs_data_get_string(settings, "service");
+	const char *id = obs_data_get_string(settings, "broadcast_id");
+	std::string out;
+	if (name && strstr(name, "YouTube") && id && *id)
+		out = id;
+	obs_data_release(settings);
+	return out;
+}
+
+// from_obs: triggered by OBS itself (streaming started, launch mid-stream),
+// where the broadcast OBS manages beats whatever was pasted earlier. From
+// the dock's Save & connect a typed ID wins; OBS is only consulted when the
+// field is empty.
+void connect_now(bool from_obs)
+{
+	const std::string id = (from_obs || current.video_id.empty()) ? broadcast_id_from_obs() : "";
+	if (!id.empty() && id != current.video_id) {
+		obs_log(LOG_INFO, "using the broadcast OBS is managing: %s", id.c_str());
+		current.video_id = id;
+		config::save(current);
+		on_ui(notify); // the dock shows the detected ID
+	}
 	if (current.api_key.empty() || current.video_id.empty()) {
 		std::lock_guard<std::mutex> lock(mtx);
 		status_text = current.api_key.empty() ? "Enter your YouTube API key in the Chiripy dock."
@@ -135,7 +167,7 @@ void on_frontend_event(enum obs_frontend_event event, void *)
 		// The video ID a streamer pasted earlier may only go live now;
 		// the worker retries the lookup until it does.
 		if (!stream || stream->state() == youtube::State::Idle || stream->state() == youtube::State::Stopped)
-			connect_now();
+			connect_now(true);
 		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
 		disconnect();
@@ -170,7 +202,7 @@ void init()
 	// Only spend quota at launch if a stream is already running (OBS was
 	// restarted mid-stream); otherwise wait for Streaming Started or the dock.
 	if (obs_frontend_streaming_active())
-		connect_now();
+		connect_now(true);
 	else
 		notify();
 }
@@ -215,7 +247,7 @@ void save_and_connect(const std::string &api_key, const std::string &video_id)
 	current.video_id = youtube::extract_video_id(video_id);
 	if (!config::save(current))
 		obs_log(LOG_WARNING, "settings could not be saved; using them for this session only");
-	connect_now();
+	connect_now(false);
 }
 
 void disconnect()

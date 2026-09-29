@@ -29,8 +29,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 namespace chiripy::config {
 
 struct Settings {
-	std::string api_key; // in the clear in memory only
-	std::string video_id;
+	std::string api_key;  // in the clear in memory only
+	std::string video_id; // session only: never persisted (stale by next launch)
 	int rows = 8;
 };
 
