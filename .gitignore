@@ -25,11 +25,12 @@
 # Exclude CMake build number cache
 /cmake/.CMakeBuildNumber
 
-# Project docs
-!CLAUDE.md
 
 # Tests (built standalone, see tests/crypto_test.cpp)
 !/tests
 
 # Images for the README and release pages
 !/assets
+
+# Local agent instructions: kept on disk, never part of the project
+/CLAUDE.md
