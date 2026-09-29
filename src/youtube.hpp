@@ -41,6 +41,8 @@ struct ChatMessage {
 	bool is_member = false; // isChatSponsor
 	bool is_verified = false;
 	std::string deleted_message_id; // for messageDeletedEvent
+	std::string banned_channel_id;  // for userBannedEvent
+	std::string amount;             // superChatEvent: amountDisplayString
 };
 
 struct ChatLookup {

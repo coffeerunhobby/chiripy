@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "config.hpp"
+#include "chat_source.hpp"
 #include "youtube.hpp"
 
 #include <obs-frontend-api.h>
@@ -34,10 +35,11 @@ namespace {
 
 std::unique_ptr<chiripy::youtube::ChatStream> stream;
 
-// Milestone 1: every chat event goes to the OBS log. The browser-source
-// dispatch replaces the body of this function in the next step.
+// Every chat event goes to the overlay page(s) and, for now, to the OBS log
+// as well -- the log line is the support channel until the dock exists.
 void on_message(const chiripy::youtube::ChatMessage &m)
 {
+	chiripy::chat_source::message(m);
 	if (m.type == "textMessageEvent") {
 		const char *badge = m.is_owner ? "[owner] " : m.is_moderator ? "[mod] " : m.is_member ? "[member] " : "";
 		obs_log(LOG_INFO, "%s%s: %s", badge, m.author.c_str(), m.text.c_str());
@@ -51,6 +53,7 @@ void on_message(const chiripy::youtube::ChatMessage &m)
 void on_status(const std::string &s)
 {
 	obs_log(LOG_INFO, "%s", s.c_str());
+	chiripy::chat_source::status(s);
 }
 
 void start_from_config()
@@ -79,6 +82,7 @@ bool obs_module_load(void)
 	// Reference-counted; OBS's own curl users make this a no-op in practice,
 	// but a plugin must not assume that.
 	curl_global_init(CURL_GLOBAL_DEFAULT);
+	chiripy::chat_source::register_source(); // "YouTube Chat (Chiripy)" in Add Source
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
@@ -90,13 +94,15 @@ void obs_module_post_load(void)
 	// ID) is picked up without restarting OBS -- which, with OBS-managed
 	// YouTube broadcasts, would end the very stream being connected to.
 	// Runs on the UI thread and blocks for one videos.list round trip.
-	obs_frontend_add_tools_menu_item("Chiripy: Reconnect to chat", [](void *) { start_from_config(); }, nullptr);
+	obs_frontend_add_tools_menu_item(obs_module_text("Chiripy.Tools.Reconnect"), [](void *) { start_from_config(); },
+					 nullptr);
 	start_from_config();
 }
 
 void obs_module_unload(void)
 {
 	stream.reset(); // joins the worker
+	chiripy::chat_source::shutdown();
 	curl_global_cleanup();
 	obs_log(LOG_INFO, "plugin unloaded");
 }

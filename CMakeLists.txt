@@ -48,6 +48,7 @@ target_sources(
     src/config.cpp
     src/secret_store.cpp
     src/youtube.cpp
+    src/chat_source.cpp
     src/crypto/aes_gcm.cpp
     src/crypto/base64.cpp
 )

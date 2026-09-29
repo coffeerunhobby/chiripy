@@ -1,0 +1,201 @@
+<!doctype html>
+<!--
+Chiripy - low-latency YouTube live chat overlay for OBS
+Copyright (C) 2026 c4xp <c4xp@msn.com>
+GPL-2.0-or-later; see the LICENSE file in the plugin.
+
+This page is driven entirely by DOM events named "chiripy" that the plugin
+dispatches into the browser source through obs-browser's javascript_event
+proc. It never fetches anything itself. Open it in a normal browser and it
+shows demo lines so the look can be tuned without OBS.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chiripy chat overlay</title>
+<style>
+  :root {
+    --rows: 8;
+    --font-px: 20px;
+    --panel-alpha: 0.55;
+    --line-height: 1.3;
+    /* The WoW chat frame palette, roughly: names by role, text near-white. */
+    --c-text: #f0f0f0;
+    --c-owner: #ffd100;
+    --c-mod: #5e9ee6;
+    --c-member: #6cd15e;
+    --c-user: #ff80ff;
+    --c-status: #a0a0a0;
+    --c-says: #d0d0d0;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+  #panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    padding: 0.4em 0.6em;
+    background: rgba(0, 0, 0, var(--panel-alpha));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    font-family: "Arial", "Helvetica Neue", "Noto Sans", "Noto Color Emoji", sans-serif;
+    font-size: var(--font-px);
+    line-height: var(--line-height);
+    color: var(--c-text);
+    text-shadow: 0 0 2px #000, 0 0 4px #000, 1px 1px 0 #000;
+    /* Exactly --rows lines are visible; wrapped messages take the rows they
+       need and push older lines out of the top, like the game frame. */
+    height: calc(var(--rows) * var(--line-height) * var(--font-px) + 0.8em);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  #panel.no-bg {
+    background: transparent;
+    border-color: transparent;
+  }
+  #lines {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    max-height: 100%;
+  }
+  .line {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .name { font-weight: bold; }
+  .role-owner  .name { color: var(--c-owner); }
+  .role-mod    .name { color: var(--c-mod); }
+  .role-member .name { color: var(--c-member); }
+  .role-user   .name { color: var(--c-user); }
+  .says { color: var(--c-says); }
+  .status { color: var(--c-status); font-style: italic; }
+  .super { color: var(--c-owner); }
+</style>
+</head>
+<body>
+<div id="panel"><div id="lines"></div></div>
+<script>
+(function () {
+  "use strict";
+  const panel = document.getElementById("panel");
+  const lines = document.getElementById("lines");
+  const seen = new Set();          // message ids, for snapshot/live overlap
+  let rows = 8;
+
+  function keepDomSmall() {
+    // Keep a few screens of history in the DOM for wrapped lines, no more.
+    while (lines.children.length > rows * 4) {
+      const first = lines.firstElementChild;
+      seen.delete(first.dataset.id);
+      first.remove();
+    }
+  }
+
+  function addLine(el) {
+    lines.appendChild(el);
+    keepDomSmall();
+  }
+
+  // All text goes in through textContent: chat is untrusted and must never
+  // be parsed as HTML.
+  function messageLine(m) {
+    if (m.id && seen.has(m.id)) return null;
+    if (m.id) seen.add(m.id);
+    const line = document.createElement("div");
+    line.className = "line role-" + (m.role || "user");
+    line.dataset.id = m.id || "";
+    line.dataset.channel = m.channel || "";
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = m.author || "?";
+    const says = document.createElement("span");
+    says.className = "says";
+    says.textContent = m.type === "superChatEvent" ? " sends " + (m.amount || "a Super Chat") + ": "
+                     : " says: ";
+    const text = document.createElement("span");
+    text.className = m.type === "superChatEvent" ? "text super" : "text";
+    text.textContent = m.text || "";
+    line.append(name, says, text);
+    return line;
+  }
+
+  function statusLine(text) {
+    const line = document.createElement("div");
+    line.className = "line status";
+    line.textContent = text;
+    return line;
+  }
+
+  function applyConfig(c) {
+    if (typeof c.rows === "number" && c.rows > 0) rows = c.rows;
+    panel.style.setProperty("--rows", rows);
+    if (typeof c.fontPx === "number" && c.fontPx > 0)
+      panel.style.setProperty("--font-px", c.fontPx + "px");
+    if (typeof c.opacity === "number")
+      panel.style.setProperty("--panel-alpha", Math.min(1, Math.max(0, c.opacity)));
+    panel.classList.toggle("no-bg", c.background === false);
+    keepDomSmall();
+  }
+
+  function handle(ev) {
+    const d = ev.detail || {};
+    switch (d.kind) {
+      case "message": {
+        const line = messageLine(d);
+        if (line) addLine(line);
+        break;
+      }
+      case "snapshot":
+        (d.messages || []).forEach(m => { const l = messageLine(m); if (l) addLine(l); });
+        break;
+      case "delete":
+        for (const el of lines.querySelectorAll(".line"))
+          if (el.dataset.id === d.id) el.remove();
+        break;
+      case "ban":
+        for (const el of lines.querySelectorAll(".line"))
+          if (el.dataset.channel === d.channel) el.remove();
+        break;
+      case "clear":
+        lines.replaceChildren();
+        seen.clear();
+        break;
+      case "config":
+        applyConfig(d);
+        break;
+      case "status":
+        addLine(statusLine(d.text || ""));
+        break;
+    }
+  }
+
+  window.addEventListener("chiripy", handle);
+
+  // Outside OBS (no window.obsstudio): demo content for tuning the look.
+  if (!window.obsstudio) {
+    const demo = [
+      { id: "d1", role: "owner",  author: "Dread Commander Thalanor", text: "Go, report to Lady Alistra for your assignments. Suffer well, knights." },
+      { id: "d2", role: "user",   author: "Knight of the Ebon Blade", text: "Suffer well, sir!" },
+      { id: "d3", role: "member", author: "Kirilea",                  text: "creates Flask of the Whispered Pact." },
+      { id: "d4", role: "mod",    author: "Alistra",                  text: "Keep it civil in here, or the chat gets the ban hammer. Longer lines wrap onto the next row and count as rows, just like the game frame does." },
+      { id: "d5", role: "user",   author: "CoffeeRunHobby",           text: "test 4 \u{1F600}" },
+    ];
+    applyConfig({ rows: 8, fontPx: 20, opacity: 0.55, background: true });
+    addLine(statusLine("Chiripy overlay - demo mode (not inside OBS)"));
+    demo.forEach(m => addLine(messageLine(m)));
+  }
+})();
+</script>
+</body>
+</html>

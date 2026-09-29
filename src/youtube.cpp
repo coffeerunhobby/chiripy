@@ -166,6 +166,13 @@ ChatMessage parse_message(const Data &item)
 		m.published_at = sn.str("publishedAt");
 		if (const Data del = sn.obj("messageDeletedDetails"))
 			m.deleted_message_id = del.str("deletedMessageId");
+		if (const Data ban = sn.obj("userBannedDetails"))
+			if (const Data who = ban.obj("bannedUserDetails"))
+				m.banned_channel_id = who.str("channelId");
+		if (const Data sc = sn.obj("superChatDetails"))
+			m.amount = sc.str("amountDisplayString");
+		else if (const Data ss = sn.obj("superStickerDetails"))
+			m.amount = ss.str("amountDisplayString");
 	}
 	if (const Data a = item.obj("authorDetails")) {
 		m.author = a.str("displayName");
