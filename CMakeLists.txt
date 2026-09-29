@@ -34,6 +34,15 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp)
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE
+    src/plugin-main.cpp
+    src/config.cpp
+    src/secret_store.cpp
+    src/crypto/aes_gcm.cpp
+    src/crypto/base64.cpp
+)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

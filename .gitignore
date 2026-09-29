@@ -27,3 +27,6 @@
 
 # Project docs
 !CLAUDE.md
+
+# Tests (built standalone, see tests/crypto_test.cpp)
+!/tests

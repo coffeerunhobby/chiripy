@@ -24,6 +24,10 @@ if(NOT DEFINED PLUGIN_BUILD_NUMBER)
       else()
         set(PLUGIN_BUILD_NUMBER "1")
       endif()
+    else()
+      # First local configure: no cache file and no CI run id. Without this the
+      # template writes an empty cache file and set_target_properties fails.
+      set(PLUGIN_BUILD_NUMBER "1")
     endif()
   endif()
   file(WRITE "${_BUILD_NUMBER_CACHE}" "${PLUGIN_BUILD_NUMBER}")
