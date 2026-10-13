@@ -24,7 +24,11 @@ OBS, install, start OBS again.
   is not yet signed, macOS refuses it the first time: open System Settings ->
   Privacy & Security, scroll down and press **Open Anyway**, then run it
   again. It installs into `~/Library/Application Support/obs-studio/plugins/`.
-- **Windows**: extract `chiripy-<version>-windows-x64.zip` into
+- **Windows 10/11**: run `chiripy-<version>-windows-x64-installer.exe`. It
+  installs into `C:\ProgramData\obs-studio\plugins\chiripy` and is safe to
+  run again over an older version. Until the installer is signed, SmartScreen
+  shows "Windows protected your PC": press **More info** -> **Run anyway**.
+  Without the installer, extract `chiripy-<version>-windows-x64.zip` into
   `C:\ProgramData\obs-studio\plugins\`, so that you end up with
   `C:\ProgramData\obs-studio\plugins\chiripy\bin\64bit\chiripy.dll`.
 - **Linux (Ubuntu 24.04)**: `sudo apt install ./chiripy-<version>-x86_64-linux-gnu.deb`.
