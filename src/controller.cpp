@@ -235,9 +235,12 @@ void init()
 		status_text = "Not connected.";
 	}
 	// Only spend quota at launch if a stream is already running (OBS was
-	// restarted mid-stream); otherwise wait for Streaming Started or the dock.
+	// restarted mid-stream) or config.json carries a hand-written video_id
+	// (testing hook); otherwise wait for Streaming Started or the dock.
 	if (obs_frontend_streaming_active())
 		connect_now(true);
+	else if (!current.video_id.empty() && !current.api_key.empty())
+		connect_now(false);
 	else
 		notify();
 }

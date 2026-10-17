@@ -60,8 +60,14 @@ Settings load()
 			// garbage to YouTube. The dock will ask for the key again.
 			obs_log(LOG_WARNING, "stored API key failed to unseal; ignoring it");
 	}
-	// video_id is deliberately not loaded: a live video ID belongs to one
-	// stream, so a saved one is stale by the next OBS launch.
+	// video_id is never written by the plugin: a live video ID belongs to
+	// one stream, so a saved one is stale by the next OBS launch. It is
+	// read if someone put it in the file by hand -- a testing hook that
+	// makes the plugin connect at launch without touching the dock.
+	if (const char *vid = obs_data_get_string(data, "video_id"); vid && *vid) {
+		s.video_id = vid;
+		obs_log(LOG_INFO, "video_id taken from config.json (testing hook): %s", vid);
+	}
 	obs_data_set_default_int(data, "rows", s.rows);
 	s.rows = static_cast<int>(obs_data_get_int(data, "rows"));
 
