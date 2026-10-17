@@ -16,7 +16,7 @@ shows demo lines so the look can be tuned without OBS.
 <style>
   :root {
     --rows: 8;
-    --font-px: 20px;
+    --font-px: 40px;
     --panel-alpha: 0.55;
     --line-height: 1.3;
     /* Classic game chat window palette: names by role, text near-white. */
@@ -234,7 +234,7 @@ shows demo lines so the look can be tuned without OBS.
       { id: "d4", role: "mod",    author: "Alistra",                  text: "Keep it civil in here, or the chat gets the ban hammer. Longer lines wrap onto the next row and count as rows, just like the game frame does." },
       { id: "d5", role: "user",   author: "CoffeeRunHobby",           text: "test 4 \u{1F600} :_vai: :face-blue-smiling: at 10:30:45" },
     ];
-    applyConfig({ rows: 8, fontPx: 20, opacity: 0.55, background: true, greeting: "Welcome to live chat!" });
+    applyConfig({ rows: 8, fontPx: 40, opacity: 0.55, background: true, greeting: "Welcome to live chat!" });
     addLine(statusLine("Chiripy overlay - demo mode (not inside OBS)"));
     demo.forEach(m => addLine(messageLine(m)));
   }

@@ -213,10 +213,10 @@ const char *get_name(void *)
 
 void get_defaults(obs_data_t *settings)
 {
-	obs_data_set_default_int(settings, "width", 800);
-	obs_data_set_default_int(settings, "height", 400);
+	obs_data_set_default_int(settings, "width", 640);
+	obs_data_set_default_int(settings, "height", 1080);
 	obs_data_set_default_int(settings, "rows", 8);
-	obs_data_set_default_int(settings, "font_px", 20);
+	obs_data_set_default_int(settings, "font_px", 40);
 	obs_data_set_default_double(settings, "opacity", 0.55);
 	obs_data_set_default_bool(settings, "background", true);
 	obs_data_set_default_int(settings, "shadow_px", 2);
