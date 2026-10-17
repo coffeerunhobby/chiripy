@@ -185,6 +185,14 @@ void connect_now(bool from_obs)
 		return;
 	}
 	obs_log(LOG_INFO, "connecting to the chat of video %s", current.video_id.c_str());
+	// A different video means a different chat: wipe the panel and the
+	// replay history so the old stream's lines do not sit above the new
+	// ones (seen 2026-10-17 after switching from a test chat).
+	static std::string connected_video_id;
+	if (connected_video_id != current.video_id) {
+		connected_video_id = current.video_id;
+		chat_source::clear();
+	}
 	if (!stream)
 		stream = std::make_unique<youtube::ChatStream>();
 	stream->start(current.api_key, current.video_id, on_message, on_status, on_state);
