@@ -141,17 +141,12 @@ void set_common(CurlHandle &c, const std::string &api_key, long timeout)
 	curl_easy_setopt(c.h, CURLOPT_TIMEOUT, timeout);
 	curl_easy_setopt(c.h, CURLOPT_CONNECTTIMEOUT, 20L);
 	curl_easy_setopt(c.h, CURLOPT_NOSIGNAL, 1L);
-#ifdef _WIN32
-	// OBS's Windows libcurl (8.12.1-DEV, Schannel) loses the streaming
-	// response: Google's TLS 1.3 session-ticket message shows up as a
-	// "renegotiation" request only ~10 s into the window, Schannel then
-	// runs that renegotiation on the connect-timeout budget, which is
-	// spent, and the transfer dies as "SSL/TLS connection timeout" with
-	// zero bytes delivered (traced on node-c6, 2026-10-17). TLS 1.2 has
-	// no post-handshake tickets, so there is nothing to renegotiate. The
-	// 20 s connect budget above is the second guard for the same path.
-	curl_easy_setopt(c.h, CURLOPT_SSLVERSION, (long)(CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2));
-#endif
+	// OBS's Windows libcurl (8.12.1-DEV, Schannel) surfaces Google's TLS 1.3
+	// session-ticket message as a "renegotiation" ~10 s into a stream
+	// window and runs it on the connect-timeout budget; with the old 10 s
+	// budget that was already spent and the transfer died as "SSL/TLS
+	// connection timeout" with zero bytes delivered (traced on node-c6,
+	// 2026-10-17). The 20 s connect budget above leaves room for it.
 	// No Accept-Encoding: a gzip layer would buffer the server's per-message
 	// flushes and cost the latency this plugin exists to remove.
 	if (curl_trace_wanted()) {
