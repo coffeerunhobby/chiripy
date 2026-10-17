@@ -53,20 +53,61 @@ folder (see [Where is my key stored?](#faq)); delete
 ## Setup (once, about five minutes)
 
 You need a YouTube Data API key from your own Google Cloud project. This is
-free; the daily quota Google gives every project is enough for roughly six
-hours of chat per day (see [Quota](#quota)).
+free, no credit card, and the daily quota Google gives every project is
+enough for roughly six hours of chat per day (see [Quota](#quota)). The key
+only reads public chat, so any Google account works; it does not have to be
+the channel's account.
 
-1. Open <https://console.cloud.google.com/projectcreate> and create a project
-   (any name, e.g. `chiripy`). No billing account is needed.
-2. Enable the API: <https://console.cloud.google.com/apis/library/youtube.googleapis.com>
-   -- make sure your new project is selected at the top, then **Enable**.
-3. Create the key: <https://console.cloud.google.com/apis/credentials> ->
-   **Create credentials** -> **API key**. Copy it.
-4. Restrict it (recommended): click the key -> **API restrictions** ->
-   **Restrict key** -> tick only *YouTube Data API v3* -> Save. Then the key
-   can do nothing except read public YouTube data, even if it leaks.
-5. In OBS: **Docks -> Chiripy**, paste the key, press **Test key**. It should
-   say the key works.
+### 1. Create a Google Cloud project
+
+1. Sign in to Google, then open <https://console.cloud.google.com/projectcreate>.
+2. First time in Google Cloud? A welcome page asks for your country and to
+   accept the Terms of Service. Tick, **Agree and continue**. Nothing else.
+3. **Project name**: `chiripy` (anything you like). Leave **Location** as it
+   is. Press **Create**. Wait a few seconds until the bell at the top right
+   says the project is ready.
+
+### 2. Enable the YouTube Data API
+
+1. Open <https://console.cloud.google.com/apis/library/youtube.googleapis.com>.
+2. Look at the project picker at the top of the page: it must say `chiripy`
+   (your new project). If it shows another project, click it and pick
+   `chiripy`.
+3. Press **Enable**. The page becomes the API overview; nothing else to do
+   here.
+
+### 3. Create the key
+
+1. Open <https://console.cloud.google.com/apis/credentials>, again with
+   `chiripy` selected at the top.
+2. Press **+ Create credentials** -> **API key**.
+3. A form opens:
+   - **Name**: `API key YouTube` (anything).
+   - **APIs that can be accessed using this key** -> **Select API
+     restrictions**: open the list, type `youtube` in the filter, tick
+     **YouTube Data API v3**, press **OK**. Nothing else ticked.
+   - Ignore the blue note about service accounts, Agent Platform and
+     Gemini; it does not apply to YouTube.
+   - **Application restrictions**: **None**.
+   - Press **Create**.
+4. Copy the key. It starts with `AIza` and is 39 characters. If the console
+   only shows it in the list, use the **Show key** / copy icon on the row.
+
+If your console shows the key straight away in a small dialog instead of
+the form: copy it, then press **Edit API key**, set **API restrictions ->
+Restrict key -> YouTube Data API v3**, **Save**. With the restriction the
+key can do nothing except read public YouTube data, even if it leaks.
+
+### 4. Put it in OBS
+
+1. **Docks -> Chiripy**. Paste the key in **YouTube API key**.
+2. Press **Test key**. A green tick appears after the label when the key
+   works. A new key can take a minute to go live; if the test fails right
+   after creating it, wait and press **Test key** again.
+
+If the test says the API is not enabled, step 2 was done in the wrong
+project. If it says the key is invalid, copy it again from the credentials
+page, without spaces.
 
 ## Using it
 

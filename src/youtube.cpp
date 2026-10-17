@@ -22,6 +22,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "json_splitter.hpp"
 
 #include <obs-data.h>
+#include <obs-module.h>
+#include <util/platform.h>
+#include <plugin-support.h>
 
 #include <curl/curl.h>
 
@@ -36,8 +39,15 @@ namespace {
 constexpr const char *kApiBase = "https://youtube.googleapis.com/youtube/v3/";
 constexpr const char *kUserAgent = "chiripy/0.1 (OBS plugin)";
 // The server closes every stream at ~10.4 s; anything beyond this is a hung
-// connection, not a slow one.
-constexpr long kStreamTimeoutSec = 60;
+// connection, not a slow one. Seen on Windows 2026-10-17: a window that
+// never answered, three times in a row with the same resume token, while a
+// fresh start without the token worked at once. Keep this short: a stall
+// costs this many seconds of frozen chat, and the reconnect resumes from
+// the token, so nothing is lost.
+constexpr long kStreamTimeoutSec = 20;
+// Consecutive stalled windows before the resume token is dropped: the
+// first stall may be the network, the second is the token.
+constexpr int kStallsBeforeDroppingToken = 2;
 constexpr long kLookupTimeoutSec = 15;
 // While OBS is streaming but YouTube has not marked the video live yet.
 constexpr double kLookupRetrySec = 5.0;
@@ -94,6 +104,32 @@ std::string escape(CURL *h, const std::string &s)
 	return out;
 }
 
+// libcurl's own trace lines go to the OBS log when the user creates an
+// empty file named "curl-trace" in the plugin's config folder (next to
+// config.json). Opt-in diagnostics for a stalled stream window; header
+// lines are dropped so the key never lands in the log.
+bool curl_trace_wanted()
+{
+	static const bool wanted = [] {
+		char *path = obs_module_config_path("curl-trace");
+		const bool found = path && os_file_exists(path);
+		bfree(path);
+		return found;
+	}();
+	return wanted;
+}
+
+int curl_trace(CURL *, curl_infotype type, char *data, size_t size, void *)
+{
+	if (type != CURLINFO_TEXT)
+		return 0;
+	std::string line(data, size);
+	while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+		line.pop_back();
+	obs_log(LOG_INFO, "curl: %s", line.c_str());
+	return 0;
+}
+
 // The key travels as a header, never in the URL, so it stays out of any
 // proxy or curl verbose log.
 void set_common(CurlHandle &c, const std::string &api_key, long timeout)
@@ -107,6 +143,10 @@ void set_common(CurlHandle &c, const std::string &api_key, long timeout)
 	curl_easy_setopt(c.h, CURLOPT_NOSIGNAL, 1L);
 	// No Accept-Encoding: a gzip layer would buffer the server's per-message
 	// flushes and cost the latency this plugin exists to remove.
+	if (curl_trace_wanted()) {
+		curl_easy_setopt(c.h, CURLOPT_VERBOSE, 1L);
+		curl_easy_setopt(c.h, CURLOPT_DEBUGFUNCTION, curl_trace);
+	}
 }
 
 size_t write_to_string(char *ptr, size_t size, size_t nmemb, void *userdata)
@@ -313,6 +353,7 @@ void ChatStream::start(std::string api_key, std::string video_id, MessageHandler
 	on_state_ = std::move(on_state);
 	page_token_.clear();
 	backoff_ = 0;
+	stalls_ = 0;
 	stop_requested_ = false;
 	set_state(State::Connecting);
 	// An exception escaping a std::thread calls std::terminate and takes OBS
@@ -462,6 +503,48 @@ double ChatStream::connect_once()
 	long http = 0;
 	curl_easy_getinfo(c.h, CURLINFO_RESPONSE_CODE, &http);
 
+	if (got_page)
+		backoff_ = 0;
+
+	if (rc == CURLE_OPERATION_TIMEDOUT) {
+		// What the stalled window looked like, for the OBS log and
+		// "Report a problem": whether anything arrived and over which
+		// HTTP version, so a Windows-only libcurl or a filtering proxy
+		// can be told apart from a dead network.
+		curl_off_t got = 0;
+		long ver = 0;
+		curl_easy_getinfo(c.h, CURLINFO_SIZE_DOWNLOAD_T, &got);
+		curl_easy_getinfo(c.h, CURLINFO_HTTP_VERSION, &ver);
+		obs_log(LOG_WARNING, "stream window timed out after %ld s: http=%ld version=%ld bytes=%lld pages=%d",
+			kStreamTimeoutSec, http, ver, static_cast<long long>(got), got_page ? 1 : 0);
+	}
+	if (rc == CURLE_OPERATION_TIMEDOUT && got_page) {
+		// Pages arrived but libcurl never saw the end of the body (seen
+		// on Windows 2026-10-17). The chat was live the whole time, so
+		// this is a normal window end with a late close: resume from the
+		// token at once, nothing to tell the user.
+		stalls_ = 0;
+		return 0;
+	}
+	if (rc == CURLE_OPERATION_TIMEDOUT) {
+		// A window that delivered nothing for kStreamTimeoutSec. Reconnect
+		// at once: a stall is not a refusal, and a timed-out window costs
+		// no more quota than a normal one. Drop the resume token on the
+		// second stall; a fresh start then shows the chat from now on.
+		++stalls_;
+		if (stalls_ >= kStallsBeforeDroppingToken && !page_token_.empty()) {
+			page_token_.clear();
+			on_status_("YouTube stopped answering; reconnecting without the resume token.");
+		} else {
+			on_status_("YouTube stopped answering; reconnecting.");
+		}
+		// Only if it keeps stalling without the token does backoff apply.
+		if (stalls_ > kStallsBeforeDroppingToken) {
+			++backoff_;
+			return (std::min)(60.0, 2.0 * (1 << (std::min)(backoff_, 5)));
+		}
+		return 0;
+	}
 	if (rc != CURLE_OK && rc != CURLE_ABORTED_BY_CALLBACK) {
 		++backoff_;
 		const double delay = (std::min)(60.0, 2.0 * (1 << (std::min)(backoff_, 5)));
@@ -469,6 +552,7 @@ double ChatStream::connect_once()
 			   std::to_string(static_cast<int>(delay)) + " s.");
 		return delay;
 	}
+	stalls_ = 0;
 
 	if (!error_reason_seen.empty() || http != 200) {
 		const std::string what = explain(error_reason_seen, http, error_message_seen);
@@ -491,8 +575,6 @@ double ChatStream::connect_once()
 	}
 
 	// Normal end of a ~10.4 s window: reconnect at once with the token.
-	if (got_page)
-		backoff_ = 0;
 	if (splitter.incomplete())
 		on_status_("YouTube closed the connection mid-message; reconnecting.");
 	return 0;

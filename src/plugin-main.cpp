@@ -37,6 +37,10 @@ bool obs_module_load(void)
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 	chiripy::chat_source::register_source(); // "Chiripy Chat" in Add Source
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
+	// Which libcurl OBS actually gave us: version, TLS backend and HTTP/2
+	// support differ per platform, and a stalled stream window is read
+	// against this line.
+	obs_log(LOG_INFO, "libcurl: %s", curl_version());
 	return true;
 }
 

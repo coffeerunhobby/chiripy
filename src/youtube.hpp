@@ -112,6 +112,7 @@ private:
 	std::condition_variable stop_cv_; // wakes a sleeping worker on stop()
 	std::atomic<State> state_{State::Idle};
 	int backoff_ = 0; // consecutive failures, drives exponential backoff
+	int stalls_ = 0; // consecutive windows that timed out with no page
 };
 
 } // namespace chiripy::youtube
