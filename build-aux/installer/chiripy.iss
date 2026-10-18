@@ -30,6 +30,12 @@ AppPublisherURL=https://github.com/coffeerunhobby/chiripy
 AppSupportURL=https://github.com/coffeerunhobby/chiripy/issues
 AppUpdatesURL=https://github.com/coffeerunhobby/chiripy/releases
 VersionInfoVersion={#AppVersion}
+; SignPath Foundation requires the product name to be the project name and
+; the product version to match the DLL on every build.
+VersionInfoProductName=Chiripy
+VersionInfoProductVersion={#AppVersion}
+VersionInfoCompany=Coffee Run Hobby
+VersionInfoDescription=Chiripy installer for OBS Studio
 ; OBS 30+ loads machine-wide plugins from here: <dir>\bin\64bit\<name>.dll
 ; plus <dir>\data. Fixed location, so no directory page.
 DefaultDirName={commonappdata}\obs-studio\plugins\chiripy

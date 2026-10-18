@@ -35,6 +35,10 @@ OBS, install, start OBS again.
 
 Then **Docks -> Chiripy** should be in the OBS menu.
 
+Releases are built by GitHub Actions from the tagged source; see the
+[Code signing policy](#code-signing-policy) and [Privacy](#privacy) sections
+for what is signed and what the plugin sends where.
+
 ## Uninstall
 
 Close OBS first.
@@ -252,6 +256,9 @@ Team roles:
 
 Privacy: see [Privacy](#privacy) -- Chiripy transfers nothing except what you
 ask it to send to YouTube's API.
+
+The full policy, including what is signed, build provenance and how to
+verify a download, is in [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
 
 ## License
 
